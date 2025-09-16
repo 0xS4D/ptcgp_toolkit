@@ -1,0 +1,3 @@
+bindgen ./2022.3.33f1.h -o ./il2cpp_2022333f1.rs --no-layout-tests --impl-debug --with-derive-default --no-doc-comments --enable-cxx-namespaces --disable-header-comment --ignore-functions --no-prepend-enum-name --use-array-pointers-in-arguments --raw-line "#![allow(unused_qualifications)]" --raw-line "#![allow(unsafe_op_in_unsafe_fn)]" --raw-line "#![allow(clippy::useless_transmute)]" --raw-line "#![allow(clippy::too_many_arguments)]" --raw-line "#![allow(clippy::ptr_offset_with_cast)]" --raw-line "#![allow(non_camel_case_types)]" --raw-line "#![allow(non_snake_case)]" --raw-line "#![allow(non_upper_case_globals)]" --raw-line "use std::os::raw::*;" -- -x c++ -include stdint.h -include stddef.h
+
+<!-- You need bindgen. -->
