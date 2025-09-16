@@ -7,6 +7,12 @@ A Tauri-based desktop application for extracting and analyzing APKS files, speci
 > This project is for educational purposes. Please respect game terms of service and use responsibly.  
 > I'm not attempting to create private servers or exploit the game maliciously.
 
+## What’s the difference with ptcg_tool?
+- I split the extraction responsibilities into different functions. If you only need the decrypted global-metadata.dat, you can now get it directly and use it on il2cppinspectorredux or other tools.
+- I added a tab to extract the latest APKS from devices. 
+- I improved the handling of proto schema generation. Instead of generating many folders. This generates all the files in a single folder.
+- Making it easier to edit the namespaces or imports in the rust code. 
+- I’ll be adding an option to update the different Unity versions in a future.
 
 ## Features
 
@@ -37,6 +43,7 @@ A Tauri-based desktop application for extracting and analyzing APKS files, speci
 
 - **Frontend**: React + TypeScript + Tailwind CSS
 - **Backend**: Rust + Tauri
+
 
 ## Project Structure
 
@@ -86,6 +93,12 @@ src/
 3. Choose output directory for proto files
 4. Configure blacklist (default: "Lettuce." - comma-separated prefixes)
 5. Click "Generate Protos" to create schema files
+
+## TODO:
+- [ ] Clean the project. Now it's a mess.
+- [ ] Add support for update unity versions.
+- [ ] Remove the "Types" on the protos.
+- [ ] Release the headless client?
 
 ## 🙏 THANKS!
 Special thanks to:
