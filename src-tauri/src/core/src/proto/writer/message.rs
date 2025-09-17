@@ -8,6 +8,7 @@ impl ProtoMessage {
         f: &mut String,
         indent: usize,
         current_namespace: &str,
+        legacy: bool,
     ) -> fmt::Result {
         writeln!(f, "{:width$}message {} {{", "", self.name, width = indent)?;
 
@@ -15,17 +16,17 @@ impl ProtoMessage {
             en.fmt_pretty(f, indent + DEFAULT_INDENT_SIZE)?;
         }
         for msg in &self.nested_messages {
-            msg.fmt_pretty(f, indent + DEFAULT_INDENT_SIZE, current_namespace)?;
+            msg.fmt_pretty(f, indent + DEFAULT_INDENT_SIZE, current_namespace, legacy)?;
         }
         let mut sorted_fields: Vec<_> = self.fields.iter().collect();
         sorted_fields.sort_by_key(|f| f.tag);
         for field in sorted_fields {
             let with_namespace =
                 !field.namespace.is_empty() && field.namespace != current_namespace;
-            field.fmt_pretty(f, indent + DEFAULT_INDENT_SIZE, with_namespace)?;
+            field.fmt_pretty(f, indent + DEFAULT_INDENT_SIZE, with_namespace, legacy)?;
         }
         for oneof in &self.oneofs {
-            oneof.fmt_pretty(f, indent + DEFAULT_INDENT_SIZE, current_namespace)?;
+            oneof.fmt_pretty(f, indent + DEFAULT_INDENT_SIZE, current_namespace, legacy)?;
         }
         let mut sorted_map_fields: Vec<_> = self.map_fields.iter().collect();
         sorted_map_fields.sort_by_key(|m| m.tag);
@@ -35,9 +36,9 @@ impl ProtoMessage {
         writeln!(f, "{:width$}}}", "", width = indent)
     }
 
-    pub fn to_pretty_string(&self, indent: usize, current_namespace: &str) -> String {
+    pub fn to_pretty_string(&self, indent: usize, current_namespace: &str, legacy: bool) -> String {
         let mut s = String::with_capacity(256);
-        self.fmt_pretty(&mut s, indent, current_namespace)
+        self.fmt_pretty(&mut s, indent, current_namespace, legacy)
             .expect("Formatting error");
         s
     }

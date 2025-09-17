@@ -95,6 +95,7 @@ src/
 5. Click "Generate Protos" to create schema files
 
 ## TODO:
+- [X] Legacy mode for proto generation.
 - [ ] Clean the project. Now it's a mess.
 - [ ] Add support for update unity versions.
 - [ ] Remove the "Types" on the protos.

@@ -9,6 +9,7 @@ impl ProtoOneOf {
         f: &mut String,
         indent: usize,
         current_namespace: &str,
+        legacy: bool,
     ) -> fmt::Result {
         writeln!(
             f,
@@ -22,14 +23,14 @@ impl ProtoOneOf {
         for field in sorted_fields {
             let with_namespace =
                 !field.namespace.is_empty() && field.namespace != current_namespace;
-            field.fmt_pretty(f, indent + DEFAULT_INDENT_SIZE, with_namespace)?;
+            field.fmt_pretty(f, indent + DEFAULT_INDENT_SIZE, with_namespace, legacy)?;
         }
         writeln!(f, "{:width$}}}", "", width = indent)
     }
 
-    pub fn to_pretty_string(&self, indent: usize, current_namespace: &str) -> String {
+    pub fn to_pretty_string(&self, indent: usize, current_namespace: &str, legacy: bool) -> String {
         let mut s = String::with_capacity(64);
-        self.fmt_pretty(&mut s, indent, current_namespace)
+        self.fmt_pretty(&mut s, indent, current_namespace, legacy)
             .expect("Formatting error");
         s
     }

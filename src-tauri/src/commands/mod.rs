@@ -3,8 +3,13 @@ use std::io::{Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use beta::proto::extractor::generate_proto_legacy_schema;
+use beta::proto::writer::write_entry_file;
+use beta::{
+    decrypt_metadata as decrypt_metadata_data, extract_from_apks as core_extract_from_apks,
+    extract_metadata_key, extract_metadata_key_xor, generate_proto_schema, Il2Cpp,
+};
 use goblin::elf::Elf;
-use beta::{extract_from_apks as core_extract_from_apks, extract_metadata_key_xor, extract_metadata_key, decrypt_metadata as decrypt_metadata_data, generate_proto_schema, Il2Cpp};
 
 #[tauri::command]
 pub fn load_devices() -> Vec<String> {
@@ -39,7 +44,14 @@ pub fn extract_from_device(device: String, extract_path: &str) -> Result<(), Str
     let binding = Path::new(extract_path).join("splitted");
     let output_dir = binding.as_path();
     let output = Command::new(adb_path)
-        .args(["-s", &device, "shell", "pm", "path", "jp.pokemon.pokemontcgp"])
+        .args([
+            "-s",
+            &device,
+            "shell",
+            "pm",
+            "path",
+            "jp.pokemon.pokemontcgp",
+        ])
         .output()
         .expect("Failed to execute adb.exe");
 
@@ -98,15 +110,26 @@ fn create_apks_archive(dir: &Path, apks_name: &Path) -> zip::result::ZipResult<(
 }
 
 #[tauri::command]
-pub fn extract_from_apks(apks_path: String, inner_zip_name: String, inner_file_path: String, output_path: String) -> Result<(), String> {
+pub fn extract_from_apks(
+    apks_path: String,
+    inner_zip_name: String,
+    inner_file_path: String,
+    output_path: String,
+) -> Result<(), String> {
     core_extract_from_apks(&apks_path, &inner_zip_name, &inner_file_path, &output_path);
     Ok(())
 }
 
 #[tauri::command]
-pub fn decrypt_metadata(libil2cpp_path: String, encrypted_metadata_path: String, output_path: String) -> Result<(), String> {
-    let elf_data = fs::read(&libil2cpp_path).map_err(|e| format!("Failed to read libil2cpp.so: {}", e))?;
-    let enc_data = fs::read(&encrypted_metadata_path).map_err(|e| format!("Failed to read encrypted metadata: {}", e))?;
+pub fn decrypt_metadata(
+    libil2cpp_path: String,
+    encrypted_metadata_path: String,
+    output_path: String,
+) -> Result<(), String> {
+    let elf_data =
+        fs::read(&libil2cpp_path).map_err(|e| format!("Failed to read libil2cpp.so: {}", e))?;
+    let enc_data = fs::read(&encrypted_metadata_path)
+        .map_err(|e| format!("Failed to read encrypted metadata: {}", e))?;
 
     if &elf_data[0..4] != b"\x7fELF" {
         return Err("Not an ELF file".to_string());
@@ -115,42 +138,100 @@ pub fn decrypt_metadata(libil2cpp_path: String, encrypted_metadata_path: String,
     let elf = Elf::parse(&elf_data).map_err(|e| format!("Failed to parse ELF: {}", e))?;
 
     // Extract key_xor and key from the ELF
-    let (key_xor_off, key_xor) = extract_metadata_key_xor(&elf, &elf_data).map_err(|e| format!("Failed to extract key_xor: {}", e))?;
-    let key = extract_metadata_key(&elf, &elf_data, key_xor_off).map_err(|e| format!("Failed to extract key: {}", e))?;
-    let dec = decrypt_metadata_data(&enc_data, &key, key_xor).map_err(|e| format!("Failed to decrypt metadata: {}", e))?;
+    let (key_xor_off, key_xor) = extract_metadata_key_xor(&elf, &elf_data)
+        .map_err(|e| format!("Failed to extract key_xor: {}", e))?;
+    let key = extract_metadata_key(&elf, &elf_data, key_xor_off)
+        .map_err(|e| format!("Failed to extract key: {}", e))?;
+    let dec = decrypt_metadata_data(&enc_data, &key, key_xor)
+        .map_err(|e| format!("Failed to decrypt metadata: {}", e))?;
 
     if let Some(parent) = Path::new(&output_path).parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("Could not create output directory: {}", e))?;
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("Could not create output directory: {}", e))?;
     }
 
-    fs::write(&output_path, &dec).map_err(|e| format!("Failed to write decrypted metadata: {}", e))?;
+    fs::write(&output_path, &dec)
+        .map_err(|e| format!("Failed to write decrypted metadata: {}", e))?;
 
     Ok(())
 }
 
 #[tauri::command]
-pub fn generate_protos(libil2cpp_path: String, metadata_path: String, output_dir: String, blacklist: Vec<String>) -> Result<(), String> {
-    let libil2cpp_so = fs::read(&libil2cpp_path).map_err(|e| format!("Failed to read libil2cpp.so: {}", e))?;
-    let metadata_data = fs::read(&metadata_path).map_err(|e| format!("Failed to read metadata: {}", e))?;
+pub fn generate_protos(
+    libil2cpp_path: String,
+    metadata_path: String,
+    output_dir: String,
+    blacklist: Vec<String>,
+    legacy: bool,
+) -> Result<(), String> {
+    let libil2cpp_so =
+        fs::read(&libil2cpp_path).map_err(|e| format!("Failed to read libil2cpp.so: {}", e))?;
+    let metadata_data =
+        fs::read(&metadata_path).map_err(|e| format!("Failed to read metadata: {}", e))?;
 
-    let il2cpp = Il2Cpp::load_from_vec(libil2cpp_so, metadata_data).map_err(|e| format!("Failed to load IL2CPP: {}", e))?;
+    let il2cpp = Il2Cpp::load_from_vec(libil2cpp_so, metadata_data)
+        .map_err(|e| format!("Failed to load IL2CPP: {}", e))?;
 
-    let proto_files = generate_proto_schema(il2cpp).map_err(|e| format!("Failed to generate proto schema: {}", e))?;
+    fs::create_dir_all(&output_dir)
+        .map_err(|e| format!("Failed to create output directory: {}", e))?;
 
-    fs::create_dir_all(&output_dir).map_err(|e| format!("Failed to create output directory: {}", e))?;
+    if legacy {
+        let proto_files = generate_proto_legacy_schema(il2cpp)
+            .map_err(|e| format!("Failed to generate proto schema: {}", e))?;
 
-    let mut files_written = 0;
-    for unit in proto_files {
-        if blacklist.iter().any(|b| unit.namespace.starts_with(b)) {
-            continue;
+        let o_path = Path::new(&output_dir);
+        let mut entry_imports = Vec::new();
+
+        for en in proto_files.enums {
+            let package_filepath = o_path.join(&en.filename);
+            if let Some(parent) = package_filepath.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("Could not create output directory: {}", e))?;
+            }
+            fs::write(&package_filepath, en.source_code)
+                .map_err(|e| format!("Failed to write proto file: {}", e))?;
         }
 
-        let proto_file = unit.render();
-        let output_path = format!("{}/{}", output_dir, proto_file.filename);
-        fs::write(&output_path, proto_file.source_code).map_err(|e| format!("Failed to write proto file: {}", e))?;
-        files_written += 1;
+        for msg in proto_files.messages {
+            let package_filepath = o_path.join(&msg.filename);
+            if let Some(parent) = package_filepath.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("Could not create output directory: {}", e))?;
+            }
+            fs::write(&package_filepath, msg.source_code)
+                .map_err(|e| format!("Failed to write proto file: {}", e))?;
+        }
+
+        for svc in proto_files.services {
+            entry_imports.push(svc.filename.clone());
+            let package_filepath = o_path.join(&svc.filename);
+            if let Some(parent) = package_filepath.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("Could not create output directory: {}", e))?;
+            }
+            fs::write(&package_filepath, svc.source_code)
+                .map_err(|e| format!("Failed to write proto file: {}", e))?;
+        }
+
+        write_entry_file(o_path.join("services.proto"), "pptcgp", entry_imports)
+            .map_err(|e| format!("Failed to write proto file: {}", e))?;
+    } else {
+        let proto_files = generate_proto_schema(il2cpp)
+            .map_err(|e| format!("Failed to generate proto schema: {}", e))?;
+        let mut files_written = 0;
+        for unit in proto_files {
+            if blacklist.iter().any(|b| unit.namespace.starts_with(b)) {
+                continue;
+            }
+
+            let proto_file = unit.render();
+            let output_path = format!("{}/{}", output_dir, proto_file.filename);
+            fs::write(&output_path, proto_file.source_code)
+                .map_err(|e| format!("Failed to write proto file: {}", e))?;
+            files_written += 1;
+        }
+        println!("Generated {} proto files", files_written);
     }
 
-    println!("Generated {} proto files", files_written);
     Ok(())
 }

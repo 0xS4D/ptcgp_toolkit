@@ -149,7 +149,7 @@ impl ProtoSchema {
         }
     }
 
-    pub fn build(&self) -> Result<ProtoGenSchema> {
+    pub fn build(&self, legacy: bool) -> Result<ProtoGenSchema> {
         let all_used_types = self
             .packages
             .values()
@@ -171,9 +171,9 @@ impl ProtoSchema {
             .collect();
 
         for package in filtered {
-            enums.extend(self.build_enums_for_package(package)?);
-            messages.extend(self.build_messages_for_package(package)?);
-            services.extend(self.build_services_for_package(package)?);
+            enums.extend(self.build_enums_for_package(package, legacy)?);
+            messages.extend(self.build_messages_for_package(package, legacy)?);
+            services.extend(self.build_services_for_package(package, legacy)?);
         }
 
         Ok(ProtoGenSchema {
@@ -183,7 +183,7 @@ impl ProtoSchema {
         })
     }
 
-    pub fn build_units(&self) -> Result<Vec<ProtoGenUnit>> {
+    pub fn build_units(&self, legacy: bool) -> Result<Vec<ProtoGenUnit>> {
         let all_used_types = self
             .packages
             .values()
@@ -222,13 +222,13 @@ impl ProtoSchema {
 
             if let Some(msg_groups) = &package.msg_groups {
                 for msg_group in msg_groups {
-                    let content = msg_group.to_pretty_string(0, &package.package_name);
+                    let content = msg_group.to_pretty_string(0, &package.package_name, legacy);
                     unit.messages.push(content);
 
                     let imports = msg_group
                         .get_used_types()
                         .difference(&msg_group.get_contained_types())
-                        .map(|idx| self.get_formatted_filename(*idx))
+                        .map(|idx| self.get_formatted_filename(*idx, legacy))
                         .collect::<Result<HashSet<_>, _>>()?;
                     unit.imports.extend(imports);
                 }
@@ -241,7 +241,7 @@ impl ProtoSchema {
                 let imports = svc
                     .get_used_types()
                     .iter()
-                    .map(|idx| self.get_formatted_filename(*idx))
+                    .map(|idx| self.get_formatted_filename(*idx, legacy))
                     .collect::<Result<HashSet<_>, _>>()?;
                 unit.imports.extend(imports);
             }
@@ -252,10 +252,10 @@ impl ProtoSchema {
         Ok(units)
     }
 
-    fn build_enums_for_package(&self, package: &ProtoPackage) -> Result<Vec<ProtoGenFile>> {
+    fn build_enums_for_package(&self, package: &ProtoPackage, legacy: bool) -> Result<Vec<ProtoGenFile>> {
         let mut files = Vec::new();
         for en in &package.enums {
-            let filename = self.get_formatted_filename(en.type_index)?;
+            let filename = self.get_formatted_filename(en.type_index, legacy)?;
             let content = en.to_pretty_string(0);
 
             let file = ProtoGenFile::new(
@@ -264,21 +264,22 @@ impl ProtoSchema {
                 &package.header_comments,
                 None,
                 &content,
+                legacy
             )?;
             files.push(file);
         }
         Ok(files)
     }
 
-    fn build_messages_for_package(&self, package: &ProtoPackage) -> Result<Vec<ProtoGenFile>> {
+    fn build_messages_for_package(&self, package: &ProtoPackage, legacy: bool) -> Result<Vec<ProtoGenFile>> {
         let mut files = Vec::new();
         for msg_group in package.msg_groups.as_ref().unwrap() {
-            let filename = self.get_formatted_filename(msg_group.get_primary().type_index)?;
+            let filename = self.get_formatted_filename(msg_group.get_primary().type_index, legacy)?;
 
             let imports = msg_group
                 .get_used_types()
                 .difference(&msg_group.get_contained_types())
-                .map(|idx| self.get_formatted_filename(*idx))
+                .map(|idx| self.get_formatted_filename(*idx, legacy))
                 .filter(|import_filename| {
                     if let Ok(import_filename) = import_filename {
                         import_filename != &filename
@@ -288,28 +289,29 @@ impl ProtoSchema {
                 })
                 .collect::<Result<HashSet<_>, _>>()?;
 
-            let content = msg_group.to_pretty_string(0, &package.package_name);
+            let content = msg_group.to_pretty_string(0, &package.package_name, legacy);
             let file = ProtoGenFile::new(
                 filename,
                 &package.package_name,
                 &package.header_comments,
                 Some(imports),
                 &content,
+                legacy
             )?;
             files.push(file);
         }
         Ok(files)
     }
 
-    fn build_services_for_package(&self, package: &ProtoPackage) -> Result<Vec<ProtoGenFile>> {
+    fn build_services_for_package(&self, package: &ProtoPackage, legacy: bool) -> Result<Vec<ProtoGenFile>> {
         let mut files = Vec::new();
         for svc in &package.services {
-            let filename = self.get_formatted_filename(svc.type_index)?;
+            let filename = self.get_formatted_filename(svc.type_index, legacy)?;
 
             let imports = svc
                 .get_used_types()
                 .iter()
-                .map(|idx| self.get_formatted_filename(*idx))
+                .map(|idx| self.get_formatted_filename(*idx, legacy))
                 .filter(|import_filename| {
                     if let Ok(import_filename) = import_filename {
                         import_filename != &filename
@@ -326,29 +328,30 @@ impl ProtoSchema {
                 &package.header_comments,
                 Some(imports),
                 &content,
+                legacy
             )?;
             files.push(file);
         }
         Ok(files)
     }
 
-    fn get_formatted_filename(&self, type_index: TypeIndex) -> Result<String> {
+    fn get_formatted_filename(&self, type_index: TypeIndex, legacy: bool) -> Result<String> {
         let filename = self
             .type_file_mapping
             .get(&type_index)
             .ok_or_else(|| anyhow!("Missing type index in schema mapping for {}", type_index))?;
 
-        let filename = Self::remap_builtin_filenames(filename);
+        let filename = Self::remap_builtin_filenames(filename, legacy);
 
         Ok(filename)
     }
 
-    fn remap_builtin_filenames(namespace: &str) -> String {
+    fn remap_builtin_filenames(namespace: &str, legacy: bool) -> String {
         if let Some(remaining) = namespace.strip_prefix("Google.Protobuf.WellKnownTypes.") {
             let last_seg = remaining.rsplit('.').next().unwrap();
             let lower = last_seg.to_ascii_lowercase();
             return format!("google/protobuf/{}.proto", lower);
         }
-        format_package_filename(namespace)
+        format_package_filename(namespace, legacy)
     }
 }

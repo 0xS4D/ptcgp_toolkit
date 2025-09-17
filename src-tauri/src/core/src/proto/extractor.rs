@@ -12,7 +12,7 @@ use crate::{
         one_of::ProtoOneOf,
         package::ProtoPackage,
         proto_enum::ProtoEnum,
-        schema::{ProtoGenUnit, ProtoSchema},
+        schema::{ProtoGenSchema, ProtoGenUnit, ProtoSchema},
         service::{ProtoService, ProtoServiceMethod},
     },
     unity::{
@@ -43,7 +43,30 @@ pub fn generate_proto_schema(il2cpp: Il2Cpp) -> Result<Vec<ProtoGenUnit>> {
     integrate_nested_types_into_packages(&mut schema, &mut nested_types_map);
 
     schema.seal();
-    schema.build_units()
+    schema.build_units(false)
+}
+
+pub fn generate_proto_legacy_schema(il2cpp: Il2Cpp) -> Result<ProtoGenSchema> {
+    let mut schema = ProtoSchema::new();
+
+    let mut nested_types_map: HashMap<TypeIndex, Vec<ProtoType>> = HashMap::new();
+    let mut oneof_cases: HashMap<TypeIndex, Vec<ProtoEnum>> = HashMap::new();
+
+    for game_image in &il2cpp.metadata.images {
+        process_image(
+            game_image,
+            &il2cpp,
+            &mut schema,
+            &mut nested_types_map,
+            &mut oneof_cases,
+        )?;
+    }
+
+    process_nested_types(&il2cpp, &mut nested_types_map)?;
+    integrate_nested_types_into_packages(&mut schema, &mut nested_types_map);
+
+    schema.seal();
+    schema.build(true)
 }
 
 static NET_TO_PROTO: phf::Map<&'static str, &'static str> = phf_map! {

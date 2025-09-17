@@ -7,6 +7,7 @@ mod proto_enum;
 mod service;
 
 use hashbrown::HashSet;
+use heck::ToSnakeCase;
 use itertools::Itertools;
 use std::fmt::{self, Write};
 use std::fs::File;
@@ -27,11 +28,12 @@ impl ProtoGenFile {
         header_comments: &[String],
         imports: Option<HashSet<String>>,
         content: &str,
+        legacy: bool,
     ) -> Result<ProtoGenFile, fmt::Error> {
         let mut source_code = String::with_capacity(1024);
         write_header(
             &mut source_code,
-            format_package_name(package_name),
+            format_package_name(package_name, legacy),
             header_comments,
             imports,
         )?;
@@ -74,19 +76,36 @@ pub(crate) fn write_header(
     Ok(())
 }
 
-pub(crate) fn format_package_name(package_name: &str) -> String {
-    package_name.to_string()
-}
-
-pub(crate) fn format_package_filename(package_name: &str) -> String {
-    let mut parts: Vec<_> = package_name.split('.').collect();
-    if !parts.is_empty() {
-        parts.pop();
+pub(crate) fn format_package_name(package_name: &str, legacy: bool) -> String {
+    if legacy {
+        package_name
+            .split('.')
+            .map(|s| s.to_snake_case())
+            .collect::<Vec<_>>()
+            .join(".")
+    } else {
+        package_name.to_string()
     }
-    format!("{}.proto", parts.join("."))
 }
 
-pub(crate) fn write_entry_file(
+pub(crate) fn format_package_filename(package_name: &str, legacy: bool) -> String {
+    if legacy {
+        let package_name = package_name
+            .split('.')
+            .map(|s| s.to_snake_case())
+            .collect::<Vec<_>>()
+            .join("/");
+        format!("{}.proto", package_name)
+    } else {
+        let mut parts: Vec<_> = package_name.split('.').collect();
+        if !parts.is_empty() {
+            parts.pop();
+        }
+        format!("{}.proto", parts.join("."))
+    }
+}
+
+pub fn write_entry_file(
     file_path: PathBuf,
     namespace: &str,
     public_imports: Vec<String>,
