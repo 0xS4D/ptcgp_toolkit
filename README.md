@@ -75,6 +75,9 @@ src/
 
 ## Usage
 
+- bun install
+- bun tauri dev
+
 ### 1. APK Extraction from Device
 1. Connect your Android device via USB with Developer Options enabled
 2. Click "Reload Devices" to detect connected devices
